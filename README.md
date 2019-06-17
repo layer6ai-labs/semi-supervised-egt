@@ -3,6 +3,43 @@
 </p>
 
 ## CVPR'19 Semi-Supervised Exploration for Image Retrieval
+for GEM training params are:
+``` '/media/himanshu/himanshu-dsk2/jeremy/copied_code/cnnimageretrieval-pytorch/export'
+--gpu-id
+1
+--training-dataset
+google-landmark-recognition
+--test-datasets
+roxford5k
+--arch
+resnet101
+--pool
+gem
+--loss
+contrastive
+--loss-margin
+1.6
+--optimizer
+adam
+--lr
+2e-6
+--neg-num
+3
+--query-size=2000
+--pool-size=15000
+--batch-size
+10
+--image-size
+750
+--test-whiten
+retrieval-SfM-120k
+--workers
+10
+--test-freq
+2
+--whitening
+```
+
 to create the subgtaph:
 
     python write_same_label.py test_to_label.pkl label_to_index_sorted.pkl
