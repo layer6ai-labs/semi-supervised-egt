@@ -3,6 +3,12 @@
 </p>
 
 ## CVPR'19 Semi-Supervised Exploration for Image Retrieval
+For GEM , use the repo:
+``` https://github.com/filipradenovic/cnnimageretrieval-pytorch```
+
+
+For DIR latents, use pretrained weights and code from:
+```https://github.com/figitaki/deep-retrieval ```
 for GEM training params are:
 ``` '/media/himanshu/himanshu-dsk2/jeremy/copied_code/cnnimageretrieval-pytorch/export'
 --gpu-id
