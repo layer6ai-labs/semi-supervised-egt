@@ -6,11 +6,7 @@
 for GEM training params are:
 ``` '/media/himanshu/himanshu-dsk2/jeremy/copied_code/cnnimageretrieval-pytorch/export'
 --gpu-id
-1
---training-dataset
-google-landmark-recognition
---test-datasets
-roxford5k
+0
 --arch
 resnet101
 --pool
@@ -18,7 +14,7 @@ gem
 --loss
 contrastive
 --loss-margin
-1.6
+.8
 --optimizer
 adam
 --lr
@@ -30,7 +26,7 @@ adam
 --batch-size
 10
 --image-size
-750
+700
 --test-whiten
 retrieval-SfM-120k
 --workers
