@@ -40,6 +40,10 @@ retrieval-SfM-120k
 --whitening
 ```
 
+to create prebuild files for the following steps:
+
+    `python create_prebuild.py`
+
 to create the subgtaph:
 
     python write_same_label.py test_to_label.pkl label_to_index_sorted.pkl
