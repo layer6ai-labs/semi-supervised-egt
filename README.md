@@ -42,9 +42,9 @@ retrieval-SfM-120k
 --whitening
 ```
 
-to create prebuild files for the following steps:
+to create prebuild files:
 
-    `python create_prebuild.py`
+    python create_prebuild.py
 
 to create the subgtaph:
 
