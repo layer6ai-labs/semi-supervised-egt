@@ -61,3 +61,8 @@ to run semisupervise egt, down the egt repo: https://github.com/layer6ai-labs/EG
 and run the following command:
 
     java -jar target/egt.jar -k 80 -q 117577 -t70 -p 100 -n 256016 --time merged_graph.txt test.txt
+
+
+link for downloading the required files and weights:
+
+`https://drive.google.com/drive/folders/1T6bkfRoV-d0sNbjaWqI9dFS3DT6HGour?usp=sharing`
