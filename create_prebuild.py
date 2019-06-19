@@ -12,51 +12,15 @@ import operator
 import faiss
 import time
 
-import sys
-sys.path.append('..')
-
-from teststuff import runevaluation
-
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--load', type=bool, default=False)
-parser.add_argument('--multi', type=bool, default=False)
 parser.add_argument('--all-considered', type=bool, default=True)
 parser.add_argument('--ransac', type=bool, default=False)
-parser.add_argument('--recurse', type=bool, default=False)
-parser.add_argument('--num-iter', type=int, default=1)
-parser.add_argument('--add', type=bool, default=True)
+# parser.add_argument('--recurse', type=bool, default=False)
+# parser.add_argument('--num-iter', type=int, default=1)
+# parser.add_argument('--add', type=bool, default=True)
 
 args = parser.parse_args()
-
-
-def doRetrieval(Q, X, k=100, verbose=True):
-    res = faiss.StandardGpuResources()
-    if verbose:
-        print("creating indexFlatl2")
-    index = faiss.IndexFlatL2(X.shape[1])
-    if verbose:
-        print("put to gpu")
-    index = faiss.index_cpu_to_gpu(res, 0, index)
-    if verbose:
-        print("adding index to faiss")
-
-    # X shape: nxd
-    # split into 2 chunks
-    index.add(X)
-    if verbose:
-        print("num of index: " + str(index.ntotal))
-    if verbose:
-        print("searching")
-    start = time.time()
-    D, I = index.search(Q, k)
-    if verbose:
-        print('Computing dot product')
-    elapse = time.time() - start
-    if verbose:
-        print(elapse)
-
-    return D, I
 
 
 def build_train_to_label_dict(train_csv_path):
@@ -121,8 +85,6 @@ def read_index_to_train(path, train_to_label, proc_type):
                         index_to_train[index_hash] = item_hashes
                         index_to_label_score[index_hash] = default_thresh
 
-                    if args.recurse:
-                        index_to_train_scores[index_hash] = item_scores
             else:
                 if proc_type == 'index':
                     voting_candidates = 5
@@ -153,9 +115,6 @@ def read_index_to_train(path, train_to_label, proc_type):
                 else: # todo: hacky
                     index_to_label_score[index_hash] = default_thresh
                 index_to_train[index_hash] = item_hashes
-
-                if args.recurse:
-                    index_to_train_scores[index_hash] = item_scores
 
     return index_to_train, index_to_label, index_to_label_score, index_to_train_scores
 
@@ -244,16 +203,6 @@ def build_label_to_index_dict(index_to_label):
                 label_to_index[label].append(index_hash)
             else:
                 label_to_index[label] = [index_hash]
-
-    return label_to_index
-
-
-def build_label_to_index_dict_multi(index_to_label):
-    label_to_index = defaultdict(list)
-    for index_hash in index_to_label:
-        label_set = index_to_label[index_hash]
-        for label in label_set:
-            label_to_index[label].append(index_hash)
 
     return label_to_index
 
@@ -387,14 +336,6 @@ def union_with_ransac(a_to_b, ransac_a_to_b):
     return a_to_b
 
 
-def get_full_submission_dict(s_data):
-    s_dict = {}
-    for line in s_data:
-        test_hash = line.split(',')[0]
-        s_dict[test_hash] = line.split(',')[1].split(' ')
-    return s_dict
-
-
 def sort_indices(label_to_index, index_to_label_score):
     sorted_label_to_index = defaultdict(list)
     for label in label_to_index:
@@ -405,368 +346,59 @@ def sort_indices(label_to_index, index_to_label_score):
     return sorted_label_to_index
 
 
-def prepend_all(test_to_label, label_to_index, index_to_label_score, index_to_label):
-    lines = list(open('data/jason_old_best.txt', 'r'))
-    lines = [l.strip() for l in lines[1:]]
-    s_dict = {}
-    for line in lines:
-        test_hash = line.split(',')[0]
-        s_dict[test_hash] = line.split(',')[1].split(' ')
-
-    # sort
-    label_to_index = sort_indices(label_to_index, index_to_label_score)
-    # pickle.dump(label_to_index, open("data/label_to_index_final.pkl", "wb"))
-
-    # prepend
-    prepend_dict = defaultdict(list)
-    if not args.multi:
-        for q, label in test_to_label.items():
-            if type(label) == list:
-                for l in label:
-                    if l in label_to_index:
-                        prepend_dict[q].extend(label_to_index[l])
-            else:
-                if label in label_to_index:
-                    prepend_dict[q].extend(label_to_index[label])
-    else:
-        for q, q_label_set in tqdm(test_to_label.items()):
-            for i, i_label_set in index_to_label.items():
-                inter = q_label_set.intersection(i_label_set)
-                if len(inter) > 1:
-                    for l in inter:
-                        prepend_dict[q].extend(label_to_index[l])
-
-    print("length of queries changed is ", len(prepend_dict))
-
-    # aggregate
-    new_sub_dict = defaultdict(list)
-    for q in tqdm(s_dict):
-        if q in prepend_dict:
-            new_sub_dict[q].extend(prepend_dict[q])
-        for s_i in s_dict[q]:
-            if s_i not in new_sub_dict[q]:
-                new_sub_dict[q].append(s_i)
-
-    # cut
-    for key in new_sub_dict:
-        new_sub_dict[key] = new_sub_dict[key][:100]
-
-    for key in new_sub_dict:
-        assert (len(new_sub_dict[key]) == 100)
-
-    # write to submission file
-    write_new_submission_file(new_sub_dict, 'data/rerank_old_jason_new_heursitic_and_prepend_lower_thres_new_voting_union_ransac.txt')
-    runevaluation()
-
-
 def main():
 
-    if not args.load:
-        print("train to label")
-        train_to_label = build_train_to_label_dict('/data/landmark/train.csv')
-        dump_pickle('data/train_to_label.pkl', train_to_label)
+    print("train to label")
+    train_to_label = build_train_to_label_dict('data/train.csv')
+    dump_pickle('data/train_to_label.pkl', train_to_label)
 
-        print("index to label")
-        if not args.multi:
-            index_to_train, index_to_label, index_to_label_score, index_to_train_scores = read_index_to_train('index_to_train_concat.txt', train_to_label, 'index')
-        else:
-            index_to_train, index_to_label, index_to_label_score = read_index_to_train_multi_label('index_to_train.txt',
-                                                                                       train_to_label)
-        dump_pickle('data/index_to_label.pkl', index_to_label)
-        dump_pickle('data/index_to_train.pkl', index_to_train)
-        dump_pickle('data/index_to_label_score.pkl', index_to_label_score)
+    print("index to label")
+    index_to_train, index_to_label, index_to_label_score, index_to_train_scores = read_index_to_train('data/index_to_train_concat.txt', train_to_label, 'index')
 
-        print("test to label")
-        if not args.multi:
-            test_to_train, test_to_label, test_to_label_score, test_to_train_scores = read_index_to_train('test_to_train_concat.txt', train_to_label, 'test')
-        else:
-            test_to_train, test_to_label, test_to_label_score = read_index_to_train_multi_label('test_to_train.txt', train_to_label)
+    dump_pickle('data/index_to_label.pkl', index_to_label)
+    dump_pickle('data/index_to_train.pkl', index_to_train)
+    dump_pickle('data/index_to_label_score.pkl', index_to_label_score)
 
-        dump_pickle('data/test_to_label.pkl', test_to_label)
-        dump_pickle('data/test_to_train.pkl', test_to_train)
-        dump_pickle('data/test_to_label_score.pkl', test_to_label_score)
+    print("test to label")
+    test_to_train, test_to_label, test_to_label_score, test_to_train_scores = read_index_to_train('data/test_to_train_concat.txt', train_to_label, 'test')
 
-        if args.ransac:
-            test_to_label_ransac = read_pickle_file('data/test_to_label_ransac.pkl')
-            index_to_label_ransac = read_pickle_file('data/index_to_label_ransac.pkl')
+    dump_pickle('data/test_to_label.pkl', test_to_label)
+    dump_pickle('data/test_to_train.pkl', test_to_train)
+    dump_pickle('data/test_to_label_score.pkl', test_to_label_score)
 
-            test_to_label_old = test_to_label
-            index_to_label_old = index_to_label
+    if args.ransac:
+        test_to_label_ransac = read_pickle_file('data/test_to_label_ransac.pkl')
+        index_to_label_ransac = read_pickle_file('data/index_to_label_ransac.pkl')
 
-            test_to_label = union_with_ransac(test_to_label, test_to_label_ransac)
-            index_to_label = union_with_ransac(index_to_label, index_to_label_ransac)
+        test_to_label_old = test_to_label
+        index_to_label_old = index_to_label
 
-            test_inter = set(test_to_label_ransac).intersection(test_to_label_old)
-            index_inter = set(index_to_label_ransac).intersection(index_to_label_old)
+        test_to_label = union_with_ransac(test_to_label, test_to_label_ransac)
+        index_to_label = union_with_ransac(index_to_label, index_to_label_ransac)
 
-            for t in list(test_inter):
-                if test_to_label_old[t] != test_to_label_ransac[t]:
-                    test_to_label[t] = [test_to_label_old[t], test_to_label_ransac[t]]
+        test_inter = set(test_to_label_ransac).intersection(test_to_label_old)
+        index_inter = set(index_to_label_ransac).intersection(index_to_label_old)
 
-            for i in list(index_inter):
-                if index_to_label_old[i] != index_to_label_ransac[i]:
-                    index_to_label[i] = [index_to_label_old[i], index_to_label_ransac[i]]
+        for t in list(test_inter):
+            if test_to_label_old[t] != test_to_label_ransac[t]:
+                test_to_label[t] = [test_to_label_old[t], test_to_label_ransac[t]]
 
-        print("label to index")
-        if not args.multi:
-            label_to_index = build_label_to_index_dict(index_to_label)
-        else:
-            label_to_index = build_label_to_index_dict_multi(index_to_label)
-        dump_pickle('data/label_to_index.pkl', label_to_index)
+        for i in list(index_inter):
+            if index_to_label_old[i] != index_to_label_ransac[i]:
+                index_to_label[i] = [index_to_label_old[i], index_to_label_ransac[i]]
 
-        if not args.multi:
-            label_to_test = build_label_to_index_dict(test_to_label)
-        else:
-            label_to_test = build_label_to_index_dict_multi(test_to_label)
-        dump_pickle('data/label_to_test.pkl', label_to_test)
+    print("label to index")
+    label_to_index = build_label_to_index_dict(index_to_label)
+    dump_pickle('data/label_to_index.pkl', label_to_index)
 
-    else:
-        test_to_label = read_pickle_file('data/test_to_label.pkl')
-        index_to_label = read_pickle_file('data/index_to_label.pkl')
+    label_to_test = build_label_to_index_dict(test_to_label)
+    dump_pickle('data/label_to_test.pkl', label_to_test)
 
-        # test_to_label = read_pickle_file('data/test_to_label.pkl')
-        # index_to_label = read_pickle_file('data/index_to_label.pkl')
-
-        label_to_test = read_pickle_file('data/label_to_test.pkl')
-        label_to_index = read_pickle_file('data/label_to_index.pkl')
-
-        # label_to_test = build_label_to_index_dict(test_to_label)
-        # label_to_index = build_label_to_index_dict(index_to_label)
-
-        test_to_label_score = read_pickle_file('data/test_to_label_score.pkl')
-        index_to_label_score = read_pickle_file('data/index_to_label_score.pkl')
+    label_to_index = sort_indices(label_to_index, index_to_label_score)
+    pickle.dump(label_to_index, open("data/label_to_index_sorted.pkl", "wb"))
 
     print('num in test to label', len(test_to_label))
     print('num in index to label', len(index_to_label))
-
-
-    ###########################################
-    # visualize index
-    # for t in index_to_train.keys():
-    #     print('---------------------------------------------------------------------')
-    #     os.system('display /data/landmark/stage2/index/' + t[0] + '/' + t[1] + '/' + t[2] + '/' + t + '.jpg')
-    #     print("starting index vis")
-    #     for e in index_to_train[t][:3]:
-    #         os.system('display /data/landmark/train/' + e[0] + '/' + e[1] + '/' + e[2] + '/' + e + '.jpg')
-
-    # visualize test
-    # for t in test_to_train.keys():
-    #     print('---------------------------------------------------------------------')
-    #     os.system('display /data/landmark/stage2/test/' + t[0] + '/' + t[1] + '/' + t[2] + '/' + t + '.jpg')
-    #     print("starting index vis")
-    #     for e in test_to_train[t][:3]:
-    #         os.system('display /data/landmark/train/' + e[0] + '/' + e[1] + '/' + e[2] + '/' + e + '.jpg')
-
-    # train_to_label = read_pickle_file('data/train_to_label.pkl')
-    # index_to_label = read_pickle_file('data/index_to_label.pkl')
-    # test_to_label = read_pickle_file('data/test_to_label.pkl')
-    # label_to_index = read_pickle_file('data/label_to_index.pkl')
-    # label_to_test = read_pickle_file('data/label_to_test.pkl')
-    # test_to_train = read_pickle_file('data/test_to_train.pkl')
-    # index_to_train = read_pickle_file('data/index_to_train.pkl')
-
-    prepend_all(test_to_label, label_to_index, index_to_label_score, index_to_label)
-
-    if args.recurse:
-        print("loading features")
-        Q_features = np.load("/data/landmark/stage2/ss_gem_8928_retrieval_qvec_hashord.npy")
-        I_features = np.load("/data/landmark/stage2/ss_gem_8928_retrieval_vec_hashord.npy")
-
-        test_hashes = list(open('/data/landmark/stage2/test.csv', 'r'))[1:]
-        test_hashes = [l.strip() for l in test_hashes]
-        index_hashes = list(open('/data/landmark/stage2/index.csv', 'r'))[1:]
-        index_hashes = [l.strip() for l in index_hashes]
-
-
-        Q_features = Q_features.astype("float32")
-        I_features = I_features.astype("float32")
-        print("converting to contiguous")
-        Q = np.ascontiguousarray(Q_features.T)
-        X = np.ascontiguousarray(I_features.T)
-
-        # concat everything for ease
-        all_hashes = test_hashes + index_hashes
-        test_hashes = set(test_hashes)
-        index_hashes = set(index_hashes)
-        all_features = np.concatenate([Q, X])
-        print(all_features.shape)
-
-        # build hash to location
-        hash_to_location = {}
-        for i in range(len(all_hashes)):
-            hash_to_location[all_hashes[i]] = i
-        num_to_keep = 5
-        num_votes_required = 4
-        for i in range(args.num_iter):
-            # do for test first
-            q_hashes = []
-            qs = []
-            for test in test_hashes:
-                if test not in test_to_label:
-                    q = all_features[hash_to_location[test], :]
-                    qs.append(q)
-                    q_hashes.append(test)
-
-            # do for index too:
-            # track their hashes
-            for index in index_hashes:
-                if index not in index_to_label:
-                    q = all_features[hash_to_location[index], :]
-                    qs.append(q)
-                    q_hashes.append(index)
-
-            qs = np.array(qs)
-            get_index = [key for key in index_to_label]
-            get_test = [key for key in test_to_label]
-            get_all = get_test + get_index
-            xs = [hash_to_location[name] for name in get_all]
-            x = all_features[xs, :]
-
-            # do retrieval
-            _, I = doRetrieval(qs, x, k=num_to_keep, verbose=False)
-            print(I.shape)
-
-            # for each one calculate the similarity
-            added_q = 0
-            added_i = 0
-            for i in tqdm(range(I.shape[0])):
-                name = q_hashes[i]
-                all_scores_for_q = []
-                if name in test_hashes:
-                    for j in range(len(test_to_train[name])):
-                        all_scores_for_q.append((test_to_train_scores[name][j], test_to_train[name][j]))
-                elif name in index_hashes:
-                    for j in range(len(index_to_train[name])):
-                        all_scores_for_q.append((index_to_train_scores[name][j], index_to_train[name][j]))
-                else:
-                    print("Something is wrong!!!!!!!!!!!")
-                for j in range(I.shape[1]):
-                    score = int(np.matmul(qs[i], x[I[i, j], :]) * 1000000)
-                    if name in test_hashes:
-                        all_scores_for_q.append((score, get_all[I[i, j]]))
-                    else:
-                        all_scores_for_q.append((score, get_all[I[i, j]]))
-                # compare with top3 and re-do vote
-                if name in test_hashes:
-                    all_scores_for_q.sort()
-                    all_scores_for_q = all_scores_for_q[-num_to_keep:]
-                    votes = {}
-                    test_to_train[name] = []
-                    max_score = {}
-                    for score, c in all_scores_for_q:
-                        # update test_to_train and test_to_train_scores
-                        test_to_train[name].append(c)
-
-                        if c in train_to_label:
-                            lb = train_to_label[c]
-                        elif c in index_to_label:
-                            lb = index_to_label[c]
-                        elif c in test_to_label:
-                            lb = test_to_label[c]
-                        else:
-                            print("somethign wrong here!!!")
-                            print(name)
-                        if score > 900000:
-                            if lb in votes:
-                                votes[lb] += 1
-                            else:
-                                votes[lb] = 1
-                            if lb in max_score:
-                                max_score[lb] = max(max_score[lb], score)
-                            else:
-                                max_score[lb] = score
-                    lb = -1
-                    for key in votes:
-                        if votes[key] >= num_votes_required:
-                            test_to_label_score[name] = max_score[key]- 800000
-                            # print(name, test_top3[name])
-                            test_to_label[name] = key
-                            if key in label_to_test:
-                                label_to_test[key].append(name)
-                            else:
-                                label_to_test[key] = [name]
-                            added_q += 1
-                elif name in index_hashes:
-                    all_scores_for_q.sort()
-                    all_scores_for_q = all_scores_for_q[-num_to_keep:]
-                    votes = {}
-                    index_to_train[name] = []
-                    max_score = {}
-                    for score, c in all_scores_for_q:
-                        # update test_to_train and test_to_train_scores
-                        index_to_train[name].append(c)
-
-                        if c in train_to_label:
-                            lb = train_to_label[c]
-                        elif c in index_to_label:
-                            lb = index_to_label[c]
-                        elif c in test_to_label:
-                            lb = test_to_label[c]
-                        else:
-                            print("somethign wrong here!!!")
-                            print(name)
-                        if score > 900000:
-                            if lb in votes:
-                                votes[lb] += 1
-                            else:
-                                votes[lb] = 1
-                            if lb in max_score:
-                                max_score[lb] = max(max_score[lb], score)
-                            else:
-                                max_score[lb] = score
-                    lb = -1
-                    for key in votes:
-                        if votes[key] >= num_votes_required:
-                            index_to_label_score[name] = max_score[key] - 800000
-                            # print(name, test_top3[name])
-                            index_to_label[name] = key
-                            if key in label_to_index:
-                                label_to_index[key].append(name)
-                            else:
-                                label_to_index[key] = [name]
-                            added_i += 1
-            prepend_all(test_to_label, label_to_index, index_to_label_score, index_to_label)
-
-    exit(0)
-
-    s_data = read_submission_file('data/jason_old_best.txt')
-    submission_dict = parse_submission_data(s_data, test_to_label)
-    s_dict = get_full_submission_dict(s_data)
-
-    same_label_sub_dict, other_index_same_label_dict = build_same_label_list(submission_dict, test_to_label,
-                                                                             index_to_label, label_to_index)
-
-    # s_data = read_submission_file('data/submission_file.txt')
-    # s_data = read_submission_file('data/jason_old_best.txt')
-    #
-    same_label_sub_dict = build_same_label_list2(s_dict, test_to_label, index_to_label, label_to_index)
-
-    # write_jason_prebuild(same_label_sub_dict, 'data/jason_prebuild.txt')
-
-    # new_submission_dict = {}
-    # for key in same_label_sub_dict:
-    #     new_submission_dict[key] = same_label_sub_dict[key]
-    #     for item in s_dict[key]:
-    #         if item not in new_submission_dict[key]:
-    #             new_submission_dict[key].append(item)
-
-    new_submission_dict = {}
-    for key in same_label_sub_dict:
-        new_submission_dict[key] = same_label_sub_dict[key]
-        if key in other_index_same_label_dict:
-            new_submission_dict[key] = new_submission_dict[key] + other_index_same_label_dict[key]
-
-        for item in s_dict[key]:
-            if item not in new_submission_dict[key]:
-                new_submission_dict[key].append(item)
-
-    for key in new_submission_dict:
-        new_submission_dict[key] = new_submission_dict[key][:100]
-
-    for key in new_submission_dict:
-        assert (len(new_submission_dict[key]) == 100)
-
-    write_new_submission_file(new_submission_dict, 'data/rerank_old_jason_new_heursitic_and_prepend_lower_thres_new_voting_union_ransac.txt')
 
 
 if __name__ == "__main__":

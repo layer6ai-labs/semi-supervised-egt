@@ -48,13 +48,13 @@ to create prebuild files:
 
 to create the subgtaph:
 
-    python write_same_label.py test_to_label.pkl label_to_index_sorted.pkl
+    python write_same_label.py data/test_to_label.pkl data/label_to_index_sorted.pkl
 
 this creates a file `label.txt`
 
 to merge the two graphs:
 
-    python  merge_graph.py stage2_gem_dir_concat_qe2_db2_trial1.bin label.txt
+    python  merge_graph.py data/stage2_gem_dir_concat_qe2_db2_trial1.bin label.txt
 
 
 to run semisupervise egt, down the egt repo: https://github.com/layer6ai-labs/EGT and compile target
